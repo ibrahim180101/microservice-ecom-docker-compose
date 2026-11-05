@@ -1,4 +1,19 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nova
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the Docker EC2 deployment .env file}
+      POSTGRES_DB: nova
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nova -d nova"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [microservices-network]
   main-service:
     image: 003720988361.dkr.ecr.ap-south-1.amazonaws.com/main-service:${IMAGE_TAG}
     container_name: main-service
@@ -58,6 +73,7 @@ networks:
     driver: bridge
 
 volumes:
+  postgres-data:
   user-service-data:
   product-service-data:
   order-service-data:
