@@ -5,12 +5,17 @@ pipeline {
     options {
         timestamps()
         disableConcurrentBuilds()
+        skipDefaultCheckout(true)
     }
 
     environment {
         AWS_REGION = 'ap-south-1'
         AWS_ACCOUNT_ID = '003720988361'
-        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY = '003720988361.dkr.ecr.ap-south-1.amazonaws.com'
+
+        DEPLOY_HOST = '35.154.157.141'
+        DEPLOY_USER = 'ubuntu'
+        DEPLOY_DIR = '/home/ubuntu/microservices-deploy'
     }
 
     stages {
@@ -24,6 +29,7 @@ pipeline {
         stage('Check Tools and AWS Access') {
             steps {
                 sh '''
+                    set -eu
                     docker --version
                     docker compose version
                     aws --version
@@ -34,18 +40,26 @@ pipeline {
 
         stage('Validate Docker Compose') {
             steps {
-                sh 'docker compose config -q'
+                sh '''
+                    set -eu
+                    docker compose config -q
+                    IMAGE_TAG=${BUILD_NUMBER} \
+                        docker compose -f deploy/docker-compose.yml config -q
+                '''
             }
         }
 
         stage('Build Docker Images') {
             steps {
                 sh '''
-                    docker build -t user-service:${BUILD_NUMBER} ./user-service
+                    set -eu
 
-                    docker build -t product-service:${BUILD_NUMBER} ./product-service
-
-                    docker build -t order-service:${BUILD_NUMBER} ./order-service
+                    for SERVICE in user-service product-service order-service
+                    do
+                        docker build \
+                            -t "${SERVICE}:${BUILD_NUMBER}" \
+                            "./${SERVICE}"
+                    done
                 '''
             }
         }
@@ -53,9 +67,13 @@ pipeline {
         stage('Verify Docker Images') {
             steps {
                 sh '''
-                    docker image inspect user-service:${BUILD_NUMBER} > /dev/null
-                    docker image inspect product-service:${BUILD_NUMBER} > /dev/null
-                    docker image inspect order-service:${BUILD_NUMBER} > /dev/null
+                    set -eu
+
+                    for SERVICE in user-service product-service order-service
+                    do
+                        docker image inspect \
+                            "${SERVICE}:${BUILD_NUMBER}" > /dev/null
+                    done
                 '''
             }
         }
@@ -64,13 +82,17 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    aws ecr get-login-password --region "${AWS_REGION}" > ecr-password.tmp
+
+                    PASSWORD_FILE=$(mktemp)
+                    trap 'rm -f "$PASSWORD_FILE"' EXIT
+
+                    aws ecr get-login-password \
+                        --region "$AWS_REGION" > "$PASSWORD_FILE"
 
                     docker login \
                         --username AWS \
-                        --password-stdin "${ECR_REGISTRY}" < ecr-password.tmp
-
-                    rm -f ecr-password.tmp
+                        --password-stdin "$ECR_REGISTRY" \
+                        < "$PASSWORD_FILE"
                 '''
             }
         }
@@ -78,9 +100,12 @@ pipeline {
         stage('Tag Docker Images') {
             steps {
                 sh '''
+                    set -eu
+
                     for SERVICE in user-service product-service order-service
                     do
-                        docker tag "${SERVICE}:${BUILD_NUMBER}" \
+                        docker tag \
+                            "${SERVICE}:${BUILD_NUMBER}" \
                             "${ECR_REGISTRY}/${SERVICE}:${BUILD_NUMBER}"
                     done
                 '''
@@ -90,9 +115,12 @@ pipeline {
         stage('Push Images to AWS ECR') {
             steps {
                 sh '''
+                    set -eu
+
                     for SERVICE in user-service product-service order-service
                     do
-                        docker push "${ECR_REGISTRY}/${SERVICE}:${BUILD_NUMBER}"
+                        docker push \
+                            "${ECR_REGISTRY}/${SERVICE}:${BUILD_NUMBER}"
                     done
                 '''
             }
@@ -101,21 +129,139 @@ pipeline {
         stage('Verify ECR Images') {
             steps {
                 sh '''
+                    set -eu
+
                     for SERVICE in user-service product-service order-service
                     do
                         aws ecr describe-images \
-                            --region "${AWS_REGION}" \
-                            --repository-name "${SERVICE}" \
-                            --image-ids imageTag="${BUILD_NUMBER}"
+                            --region "$AWS_REGION" \
+                            --repository-name "$SERVICE" \
+                            --image-ids "imageTag=${BUILD_NUMBER}" \
+                            --query 'imageDetails[0].imageTags' \
+                            --output text
                     done
                 '''
+            }
+        }
+
+        stage('Test SSH Connection') {
+            steps {
+                sshagent(credentials: ['docker-ec2-ssh']) {
+                    sh '''
+                        set -eu
+
+                        ssh \
+                            -o BatchMode=yes \
+                            -o StrictHostKeyChecking=yes \
+                            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                            'echo "SSH connection successful"'
+                    '''
+                }
+            }
+        }
+
+        stage('Copy Deployment Files') {
+            steps {
+                sshagent(credentials: ['docker-ec2-ssh']) {
+                    sh '''
+                        set -eu
+
+                        ssh -o StrictHostKeyChecking=yes \
+                            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                            "mkdir -p '${DEPLOY_DIR}'"
+
+                        scp -o StrictHostKeyChecking=yes \
+                            deploy/docker-compose.yml \
+                            deploy/nginx.conf \
+                            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_DIR}/"
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to Docker EC2') {
+            steps {
+                sshagent(credentials: ['docker-ec2-ssh']) {
+                    sh '''
+                        set -eu
+
+                        ssh -o StrictHostKeyChecking=yes \
+                            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                            "DEPLOY_DIR='${DEPLOY_DIR}' \
+                             IMAGE_TAG='${BUILD_NUMBER}' \
+                             ECR_REGISTRY='${ECR_REGISTRY}' \
+                             AWS_REGION='${AWS_REGION}' \
+                             bash -se" <<'REMOTE'
+set -euo pipefail
+
+cd "$DEPLOY_DIR"
+
+echo "Logging into AWS ECR..."
+
+aws ecr get-login-password --region "$AWS_REGION" |
+    docker login \
+        --username AWS \
+        --password-stdin "$ECR_REGISTRY"
+
+echo "Pulling Docker images..."
+
+IMAGE_TAG="$IMAGE_TAG" docker compose pull
+
+echo "Starting Docker containers..."
+
+IMAGE_TAG="$IMAGE_TAG" docker compose up -d \
+    --remove-orphans
+
+echo "Checking running containers..."
+
+IMAGE_TAG="$IMAGE_TAG" docker compose ps
+
+REMOTE
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sshagent(credentials: ['docker-ec2-ssh']) {
+                    sh '''
+                        set -eu
+
+                        ssh -o StrictHostKeyChecking=yes \
+                            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                            "DEPLOY_DIR='${DEPLOY_DIR}' \
+                             IMAGE_TAG='${BUILD_NUMBER}' \
+                             bash -se" <<'REMOTE'
+set -euo pipefail
+
+cd "$DEPLOY_DIR"
+
+IMAGE_TAG="$IMAGE_TAG" docker compose ps
+
+for ROUTE in users products orders
+do
+    echo "Testing /$ROUTE/"
+
+    curl --fail --silent --show-error \
+        --retry 5 \
+        --retry-delay 2 \
+        --retry-connrefused \
+        "http://127.0.0.1/$ROUTE/" > /dev/null
+done
+
+echo "All three routes are responding."
+
+REMOTE
+                    '''
+                }
             }
         }
     }
 
     post {
         success {
-            echo 'SUCCESS: All 3 Docker images pushed to AWS ECR!'
+            echo 'SUCCESS: All 3 microservices pushed to ECR and deployed!'
         }
 
         failure {
@@ -123,7 +269,6 @@ pipeline {
         }
 
         always {
-            sh 'rm -f ecr-password.tmp'
             echo 'Jenkins pipeline execution completed.'
         }
     }
