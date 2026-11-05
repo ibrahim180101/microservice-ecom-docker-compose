@@ -22,7 +22,7 @@ body{background:var(--canvas);color:var(--ink)}
 @media(max-width:560px){.site-header .nav{padding:12px 16px;flex-wrap:wrap}.site-header .brand{font-size:25px}.site-header .brand span{transform:translateX(68px)}.site-header .bag{padding:10px 12px}.site-header .promo{font-size:8px;letter-spacing:1px}.account-avatar{display:none}}
 </style></head>
 <body data-ui-version="nova-2" data-page="cart"><header class="site-header"><div class="promo">CURATED EVERYDAY ESSENTIALS · NOVA COMMERCE</div><nav class="nav" aria-label="Main navigation"><a class="brand" href="/" aria-label="NOVA Commerce home">NOVA<span>.</span><small>COMMERCE</small></a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="nav-links" onclick="toggleMenu()" aria-label="Toggle navigation">☰</button><div class="links" id="nav-links"><a data-nav="home" href="/">Home</a><a data-nav="products" href="/products/">Shop</a><a data-nav="cart" href="/cart/">Cart</a><a data-nav="users" href="/users/">Account</a><a data-nav="orders" href="/orders/">Orders</a></div><a class="bag" href="/cart/" aria-label="View shopping bag">🛍 Bag <span class="count" id="cart-count">0</span></a></nav></header><main class="wrap"><div class="eyebrow">Your picks</div><h1 class="heading">Shopping bag</h1><p class="muted">Review your products and enter delivery details to place an order.</p><div class="layout" style="margin-top:30px"><section class="panel"><h2>Your items</h2><div id="cart-items"></div></section><aside class="panel" style="align-self:start"><h2>Order summary</h2><div class="total-line"><span>Subtotal</span><strong id="subtotal">₹0</strong></div><div class="total-line"><span>Shipping</span><span>Free</span></div><div class="total-line final"><span>Total</span><span id="total">₹0</span></div><form id="delivery-form" onsubmit="checkout(event)" style="margin-top:18px;display:grid;gap:10px">
-<h3>Delivery details</h3>
+<div id="checkout-auth" style="padding:12px;background:#f5f1ff;border-radius:10px">Checking your login...</div><h3>Delivery details</h3>
 <input required name="name" placeholder="Full name" minlength="2" maxlength="100" autocomplete="name" style="padding:12px;border:1px solid #ddd;border-radius:8px">
 <input required name="email" type="email" placeholder="Email address" maxlength="150" autocomplete="email" style="padding:12px;border:1px solid #ddd;border-radius:8px">
 <input required name="phone" inputmode="numeric" pattern="[0-9]{10}" placeholder="10-digit mobile number" autocomplete="tel" style="padding:12px;border:1px solid #ddd;border-radius:8px">
@@ -60,7 +60,7 @@ function toggleMenu(){const el=document.getElementById("nav-links");const btn=do
 document.querySelector('[data-nav="cart"]').classList.add("active");
 /* Initial rendering runs after API helpers are initialized below. */
 /* Server-backed NOVA integration */
-const api=async(url,options={})=>{const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data};
+const api=async(url,options={})=>{const token=sessionStorage.getItem('nova_token');const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...(options.headers||{})}});const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data};
 const originalProducts=PRODUCTS.slice();
 async function loadProducts(){try{const data=await api('/api/products');if(!Array.isArray(data))throw Error('Invalid product response');PRODUCTS.splice(0,PRODUCTS.length,...data.map(p=>({...originalProducts.find(x=>x.id===p.id),...p,category:originalProducts.find(x=>x.id===p.id)?.category||p.category,emoji:originalProducts.find(x=>x.id===p.id)?.emoji||'📦',tone:originalProducts.find(x=>x.id===p.id)?.tone||'#eee',desc:originalProducts.find(x=>x.id===p.id)?.desc||''})));if(PAGE==='home')document.querySelector('#featured').innerHTML=PRODUCTS.slice(0,4).map(productCard).join('');if(PAGE==='products')renderProducts();if(PAGE==='cart')renderCart()}catch(e){console.error('Product API error:',e);toast('Products API unavailable; showing demo catalog')}}
 async function checkout(){const c=getCart();const items=Object.entries(c).filter(([id,n])=>Number(n)>0).map(([id,quantity])=>({productId:Number(id),quantity:Number(quantity)}));if(!items.length)return;const btn=document.querySelector('#checkout');btn.disabled=true;try{await api('/api/orders',{method:'POST',body:JSON.stringify({userId:1,items})});setCart({});location.href='/orders/'}catch(e){btn.disabled=false;toast('Order failed: '+e.message)}}
@@ -71,7 +71,7 @@ async function loadPaymentConfig(){try{const cfg=await api('/api/checkout/config
 async function loadRazorpay(){if(window.Razorpay)return;await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://checkout.razorpay.com/v1/checkout.js';s.onload=resolve;s.onerror=()=>reject(Error('Unable to load secure payment checkout'));document.head.appendChild(s)})}
 async function checkout(event){
  event.preventDefault();
- const form=document.querySelector('#delivery-form');if(!form.reportValidity())return;
+ if(!sessionStorage.getItem('nova_token')){location.href='/users/?next=checkout';return}const form=document.querySelector('#delivery-form');if(!form.reportValidity())return;
  const cart=getCart(),items=Object.entries(cart).filter(([id,n])=>Number(n)>0).map(([id,quantity])=>({productId:Number(id),quantity:Number(quantity)}));
  if(!items.length)return toast('Your cart is empty');
  const f=new FormData(form);const customer=Object.fromEntries(['name','email','phone','address','city','state','pincode'].map(k=>[k,String(f.get(k)||'').trim()]));
@@ -87,6 +87,8 @@ async function checkout(event){
   widget.open();
  }catch(e){btn.disabled=false;toast('Checkout failed: '+e.message)}
 }
+async function checkCheckoutLogin(){const el=document.querySelector('#checkout-auth');const btn=document.querySelector('#checkout');if(!sessionStorage.getItem('nova_token')){el.innerHTML='Please <a href="/users/?next=checkout"><strong>log in or register</strong></a> to place your order.';btn.disabled=true;return}try{const u=await api('/api/auth/me');el.textContent='Ordering as '+u.name;const email=document.querySelector('[name="email"]');const name=document.querySelector('[name="name"]');if(!email.value)email.value=u.email;if(!name.value)name.value=u.name}catch(e){sessionStorage.removeItem('nova_token');el.innerHTML='Session expired. <a href="/users/?next=checkout">Log in again</a>';btn.disabled=true}}
+checkCheckoutLogin();
 loadPaymentConfig();
 updateCount();
 loadProducts();
