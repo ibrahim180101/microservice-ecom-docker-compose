@@ -1,7 +1,7 @@
 'use strict';
 const express=require('express'),path=require('path'),crypto=require('crypto'),{Pool}=require('pg');
 const app=express();app.disable('x-powered-by');app.use(express.json({limit:'32kb'}));
-const pool=new Pool({connectionString:process.env.DATABASE_URL,max:5,connectionTimeoutMillis:5000});
+const pool=new Pool({max:5,connectionTimeoutMillis:5000});
 async function init(){await pool.query('CREATE TABLE IF NOT EXISTS orders(id uuid PRIMARY KEY,user_id uuid NOT NULL,record jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT NOW())');await pool.query('CREATE INDEX IF NOT EXISTS orders_user_idx ON orders(user_id,created_at DESC)')}
 async function read(userId){return (await pool.query('SELECT record FROM orders WHERE user_id=$1 ORDER BY created_at DESC',[userId])).rows.map(x=>x.record)}
 async function save(o){await pool.query('INSERT INTO orders(id,user_id,record) VALUES($1,$2,$3)',[o.id,o.userId,JSON.stringify(o)])}
