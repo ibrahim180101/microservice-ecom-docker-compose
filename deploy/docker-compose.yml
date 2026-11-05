@@ -32,6 +32,9 @@ services:
       PGDATABASE: nova
     volumes:
       - user-service-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     networks: [microservices-network]
   product-service:
@@ -47,6 +50,9 @@ services:
       PGDATABASE: nova
     volumes:
       - product-service-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     networks: [microservices-network]
   cart-service:
@@ -67,6 +73,9 @@ services:
       PGDATABASE: nova
     volumes:
       - order-service-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     networks: [microservices-network]
   nginx:
