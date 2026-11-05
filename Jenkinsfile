@@ -66,6 +66,18 @@ pipeline {
             }
         }
 
+        stage('Validate Backend Syntax') {
+            steps {
+                sh '''
+                    set -eu
+                    for SERVICE in user-service product-service order-service
+                    do
+                        docker run --rm --entrypoint node "${SERVICE}:${BUILD_NUMBER}" --check server.js
+                    done
+                '''
+            }
+        }
+
         stage('Verify Docker Images') {
             steps {
                 sh '''
@@ -256,7 +268,11 @@ do
         "http://127.0.0.1${ROUTE}" > /dev/null
 done
 
-echo "All five routes are responding."
+for SERVICE in users products orders
+do
+    curl --fail --silent --show-error "http://127.0.0.1/api/${SERVICE}" > /dev/null
+done
+echo "All five routes and three APIs are responding."
 
 REMOTE
                     '''
