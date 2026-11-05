@@ -49,5 +49,6 @@ app.post('/api/orders/:id/verify-payment',wrap(async(q,r)=>{
  if(o.paymentStatus==='paid')return r.json(publicOrder(o));
  o.paymentStatus='paid';o.status='placed';o.gatewayPaymentId=razorpay_payment_id;await update(o);r.json(publicOrder(o));
 }));
+async function migrateLegacy(){const fs=require('fs'),path=require('path');const dir=process.env.DATA_DIR||'/app/data';const f=path.join(dir,'orders.json');if(!fs.existsSync(f))return;const rows=JSON.parse(fs.readFileSync(f,'utf8'));if(!Array.isArray(rows))throw Error('Invalid legacy JSON data');for(const x of rows){if(!x.userId||!x.customer)continue;await pool.query('INSERT INTO orders(id,user_id,record,created_at) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[x.id,x.userId,JSON.stringify(x),x.createdAt||new Date().toISOString()]);}}
 app.use(express.static(path.join(__dirname,'public')));
-init().then(()=>app.listen(3000,'0.0.0.0')).catch(e=>{console.error('Database initialization failed',e);process.exit(1)});
+init().then(migrateLegacy).then(()=>app.listen(3000,'0.0.0.0')).catch(e=>{console.error('Database initialization failed',e);process.exit(1)});
