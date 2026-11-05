@@ -56,7 +56,7 @@ pipeline {
                 sh '''
                     set -eu
 
-                    for SERVICE in user-service product-service order-service
+                    for SERVICE in main-service user-service product-service cart-service order-service
                     do
                         docker build \
                             -t "${SERVICE}:${BUILD_NUMBER}" \
@@ -71,7 +71,7 @@ pipeline {
                 sh '''
                     set -eu
 
-                    for SERVICE in user-service product-service order-service
+                    for SERVICE in main-service user-service product-service cart-service order-service
                     do
                         docker image inspect \
                             "${SERVICE}:${BUILD_NUMBER}" > /dev/null
@@ -104,7 +104,7 @@ pipeline {
                 sh '''
                     set -eu
 
-                    for SERVICE in user-service product-service order-service
+                    for SERVICE in main-service user-service product-service cart-service order-service
                     do
                         docker tag \
                             "${SERVICE}:${BUILD_NUMBER}" \
@@ -119,7 +119,7 @@ pipeline {
                 sh '''
                     set -eu
 
-                    for SERVICE in user-service product-service order-service
+                    for SERVICE in main-service user-service product-service cart-service order-service
                     do
                         docker push \
                             "${ECR_REGISTRY}/${SERVICE}:${BUILD_NUMBER}"
@@ -133,7 +133,7 @@ pipeline {
                 sh '''
                     set -eu
 
-                    for SERVICE in user-service product-service order-service
+                    for SERVICE in main-service user-service product-service cart-service order-service
                     do
                         aws ecr describe-images \
                             --region "$AWS_REGION" \
@@ -241,18 +241,18 @@ cd "$DEPLOY_DIR"
 
 IMAGE_TAG="$IMAGE_TAG" docker compose ps
 
-for ROUTE in users products orders
+for ROUTE in / /users/ /products/ /cart/ /orders/
 do
-    echo "Testing /$ROUTE/"
+    echo "Testing $ROUTE"
 
     curl --fail --silent --show-error \
         --retry 5 \
         --retry-delay 2 \
         --retry-connrefused \
-        "http://127.0.0.1/$ROUTE/" > /dev/null
+        "http://127.0.0.1${ROUTE}" > /dev/null
 done
 
-echo "All three routes are responding."
+echo "All five routes are responding."
 
 REMOTE
                     '''
@@ -263,7 +263,7 @@ REMOTE
 
     post {
         success {
-            echo 'SUCCESS: All 3 microservices pushed to ECR and deployed!'
+            echo 'SUCCESS: All 5 microservices pushed to ECR and deployed!'
         }
 
         failure {
