@@ -45,7 +45,7 @@ pipeline {
 
                     docker compose config -q
 
-                    IMAGE_TAG=${BUILD_NUMBER} \
+                    POSTGRES_PASSWORD=ci-validation-placeholder IMAGE_TAG=${BUILD_NUMBER} \
                         docker compose -f deploy/docker-compose.yml config -q
                 '''
             }
@@ -209,7 +209,11 @@ pipeline {
 set -euo pipefail
 
 cd "$DEPLOY_DIR"
-
+if [ ! -f .env ] || ! grep -q '^POSTGRES_PASSWORD=.' .env; then
+  echo "ERROR: Provision a secure POSTGRES_PASSWORD in $DEPLOY_DIR/.env before deploying PostgreSQL."
+  exit 1
+fi
+echo "Database secret preflight passed."
 echo "Logging into AWS ECR..."
 
 aws ecr get-login-password --region "$AWS_REGION" |
