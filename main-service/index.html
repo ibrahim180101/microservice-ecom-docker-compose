@@ -44,7 +44,7 @@ function initUser(){const profile=read("nova_profile",{name:"Alex Morgan",email:
 function saveUser(e){e.preventDefault();const p={};for(const k of ["name","email","city"])p[k]=document.querySelector("#"+k).value.trim();write("nova_profile",p);toast("Profile saved on this browser")}
 function toggleMenu(){const el=document.getElementById("nav-links");const btn=document.querySelector(".menu-toggle");const open=el.classList.toggle("open");btn.setAttribute("aria-expanded",String(open));btn.textContent=open?"✕":"☰"}
 document.querySelector('[data-nav="home"]').classList.add("active");
-updateCount();if(PAGE==="home")document.querySelector("#featured").innerHTML=PRODUCTS.slice(0,4).map(productCard).join("");if(PAGE==="products")renderProducts();if(PAGE==="cart")renderCart();if(PAGE==="orders")renderOrders();if(PAGE==="users")initUser();
+/* Initial rendering runs after API helpers are initialized below. */
 /* Server-backed NOVA integration */
 const api=async(url,options={})=>{const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data};
 const originalProducts=PRODUCTS.slice();
@@ -53,6 +53,8 @@ async function checkout(){const c=getCart();const items=Object.entries(c).filter
 async function renderOrders(){const holder=document.querySelector('#orders-list');try{const orders=await api('/api/orders');document.querySelector('#order-count').textContent=orders.length;document.querySelector('#order-total').textContent=money(orders.reduce((sum,o)=>sum+Number(o.total||0),0));holder.innerHTML=orders.length?orders.slice().reverse().map(o=>'<div class="order-card"><div class="order-head"><div><strong>'+safe(o.id)+'</strong><p class="muted" style="margin:5px 0">'+safe(new Date(o.createdAt).toLocaleDateString('en-IN'))+' · '+o.items.reduce((s,i)=>s+i.quantity,0)+' items</p></div><span class="status">'+safe(o.status)+'</span><strong>'+money(o.total)+'</strong></div><p class="muted" style="font-size:12px">'+o.items.map(i=>safe(i.name)+' × '+i.quantity).join(' · ')+'</p></div>').join(''):'<div class="panel empty"><h2>No orders yet</h2><p>Place an order from your cart.</p><a href="/products/" class="btn">Start shopping</a></div>'}catch(e){holder.innerHTML='<div class="panel empty">Unable to load orders from the API.</div>';toast(e.message)}}
 async function initUser(){try{const users=await api('/api/users');const u=users[0];if(u){document.querySelector('#name').value=u.name||'';document.querySelector('#email').value=u.email||'';document.querySelector('#city').value=read('nova_profile',{}).city||'';window.novaUserId=u.id}const orders=await api('/api/orders');document.querySelector('#user-orders').textContent=orders.length;document.querySelector('#user-spend').textContent=money(orders.reduce((s,o)=>s+Number(o.total||0),0));document.querySelector('#user-items').textContent=Object.values(getCart()).reduce((s,n)=>s+Number(n),0)}catch(e){toast('Account API unavailable: '+e.message)}}
 async function saveUser(e){e.preventDefault();const name=document.querySelector('#name').value.trim();const city=document.querySelector('#city').value.trim();if(!window.novaUserId)return toast('No account available');try{await api('/api/users/'+encodeURIComponent(window.novaUserId),{method:'PATCH',body:JSON.stringify({name})});write('nova_profile',{city});toast('Name saved to backend; city saved in browser')}catch(e){toast('Save failed: '+e.message)}}
+updateCount();
 loadProducts();
-
+if(PAGE==="orders")renderOrders();
+if(PAGE==="users")initUser();
 </script></body></html>
