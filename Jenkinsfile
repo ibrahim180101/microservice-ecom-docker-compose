@@ -13,7 +13,7 @@ pipeline {
         AWS_ACCOUNT_ID = '003720988361'
         ECR_REGISTRY = '003720988361.dkr.ecr.ap-south-1.amazonaws.com'
 
-        DEPLOY_HOST = '35.154.157.141'
+        DEPLOY_HOST = '10.50.2.243'
         DEPLOY_USER = 'ubuntu'
         DEPLOY_DIR = '/home/ubuntu/microservices-deploy'
     }
@@ -42,7 +42,9 @@ pipeline {
             steps {
                 sh '''
                     set -eu
+
                     docker compose config -q
+
                     IMAGE_TAG=${BUILD_NUMBER} \
                         docker compose -f deploy/docker-compose.yml config -q
                 '''
