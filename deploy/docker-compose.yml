@@ -7,11 +7,21 @@ services:
   user-service:
     image: 003720988361.dkr.ecr.ap-south-1.amazonaws.com/user-service:${IMAGE_TAG}
     container_name: user-service
+    environment:
+      DATA_DIR: /app/data
+      SERVICE_NAME: user-service
+    volumes:
+      - user-service-data:/app/data
     restart: unless-stopped
     networks: [microservices-network]
   product-service:
     image: 003720988361.dkr.ecr.ap-south-1.amazonaws.com/product-service:${IMAGE_TAG}
     container_name: product-service
+    environment:
+      DATA_DIR: /app/data
+      SERVICE_NAME: product-service
+    volumes:
+      - product-service-data:/app/data
     restart: unless-stopped
     networks: [microservices-network]
   cart-service:
@@ -22,6 +32,11 @@ services:
   order-service:
     image: 003720988361.dkr.ecr.ap-south-1.amazonaws.com/order-service:${IMAGE_TAG}
     container_name: order-service
+    environment:
+      DATA_DIR: /app/data
+      SERVICE_NAME: order-service
+    volumes:
+      - order-service-data:/app/data
     restart: unless-stopped
     networks: [microservices-network]
   nginx:
@@ -41,3 +56,8 @@ services:
 networks:
   microservices-network:
     driver: bridge
+
+volumes:
+  user-service-data:
+  product-service-data:
+  order-service-data:
