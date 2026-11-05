@@ -1,7 +1,7 @@
 'use strict';
 const express=require('express'),crypto=require('crypto'),{Pool}=require('pg');
 const app=express();app.disable('x-powered-by');app.use(express.json({limit:'16kb'}));
-const pool=new Pool({connectionString:process.env.DATABASE_URL,max:5,connectionTimeoutMillis:5000});
+const pool=new Pool({max:5,connectionTimeoutMillis:5000});
 async function init(){await pool.query('CREATE TABLE IF NOT EXISTS users(id uuid PRIMARY KEY, name text NOT NULL, email text NOT NULL UNIQUE, password_hash text NOT NULL)');await pool.query('CREATE TABLE IF NOT EXISTS sessions(token_hash text PRIMARY KEY,user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at timestamptz NOT NULL)')}
 const clean=u=>({id:u.id,name:u.name,email:u.email});
 const hash=p=>{const salt=crypto.randomBytes(16).toString('hex');return salt+':'+crypto.scryptSync(p,salt,64).toString('hex')};
