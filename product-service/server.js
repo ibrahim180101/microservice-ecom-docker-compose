@@ -8,5 +8,6 @@ const wrap=fn=>(q,r)=>Promise.resolve(fn(q,r)).catch(e=>{console.error(e);r.stat
 app.get('/health',wrap(async(q,r)=>{await pool.query('SELECT 1');r.json({status:'ok',service:'product-service'})}));
 app.get('/api/products',wrap(async(q,r)=>r.json((await pool.query('SELECT id,name,price FROM products ORDER BY id')).rows)));
 app.get('/api/products/:id',wrap(async(q,r)=>{const x=(await pool.query('SELECT id,name,price FROM products WHERE id=$1',[Number(q.params.id)||0])).rows[0];r.status(x?200:404).json(x||{error:'Not found'})}));
+async function migrateLegacy(){const fs=require('fs'),path=require('path');const dir=process.env.DATA_DIR||'/app/data';const f=path.join(dir,'products.json');if(!fs.existsSync(f))return;const rows=JSON.parse(fs.readFileSync(f,'utf8'));if(!Array.isArray(rows))throw Error('Invalid legacy JSON data');for(const x of rows){await pool.query('INSERT INTO products(id,name,price) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,price=EXCLUDED.price',[x.id,x.name,x.price]);}}
 app.use(express.static(require('path').join(__dirname,'public')));
-init().then(()=>app.listen(3000,'0.0.0.0')).catch(e=>{console.error('Database initialization failed',e);process.exit(1)});
+init().then(migrateLegacy).then(()=>app.listen(3000,'0.0.0.0')).catch(e=>{console.error('Database initialization failed',e);process.exit(1)});
