@@ -214,6 +214,10 @@ echo "Starting Docker containers..."
 IMAGE_TAG="$IMAGE_TAG" docker compose up -d \
     --remove-orphans
 
+echo "Reloading Nginx configuration..."
+docker exec nginx-proxy nginx -t
+docker exec nginx-proxy nginx -s reload
+
 echo "Checking running containers..."
 
 IMAGE_TAG="$IMAGE_TAG" docker compose ps
