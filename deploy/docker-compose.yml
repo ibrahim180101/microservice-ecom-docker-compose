@@ -1,0 +1,41 @@
+services:
+
+  user-service:
+    image: 003720988361.dkr.ecr.ap-south-1.amazonaws.com/user-service:${IMAGE_TAG}
+    container_name: user-service
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  product-service:
+    image: 003720988361.dkr.ecr.ap-south-1.amazonaws.com/product-service:${IMAGE_TAG}
+    container_name: product-service
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  order-service:
+    image: 003720988361.dkr.ecr.ap-south-1.amazonaws.com/order-service:${IMAGE_TAG}
+    container_name: order-service
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - microservices-network
+
+networks:
+  microservices-network:
+    driver: bridge
