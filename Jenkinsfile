@@ -268,11 +268,11 @@ do
         "http://127.0.0.1${ROUTE}" > /dev/null
 done
 
-for SERVICE in users products orders
+for SERVICE in products
 do
     curl --fail --silent --show-error "http://127.0.0.1/api/${SERVICE}" > /dev/null
 done
-echo "All five routes and three APIs are responding."
+echo "Public products and frontend routes are responding; protected APIs require login."
 
 REMOTE
                     '''
