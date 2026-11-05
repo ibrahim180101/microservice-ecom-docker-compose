@@ -25,6 +25,11 @@ services:
     environment:
       DATA_DIR: /app/data
       SERVICE_NAME: user-service
+      PGHOST: postgres
+      PGPORT: '5432'
+      PGUSER: nova
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Docker EC2 .env}
+      PGDATABASE: nova
     volumes:
       - user-service-data:/app/data
     restart: unless-stopped
@@ -35,6 +40,11 @@ services:
     environment:
       DATA_DIR: /app/data
       SERVICE_NAME: product-service
+      PGHOST: postgres
+      PGPORT: '5432'
+      PGUSER: nova
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Docker EC2 .env}
+      PGDATABASE: nova
     volumes:
       - product-service-data:/app/data
     restart: unless-stopped
@@ -50,6 +60,11 @@ services:
     environment:
       DATA_DIR: /app/data
       SERVICE_NAME: order-service
+      PGHOST: postgres
+      PGPORT: '5432'
+      PGUSER: nova
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Docker EC2 .env}
+      PGDATABASE: nova
     volumes:
       - order-service-data:/app/data
     restart: unless-stopped
